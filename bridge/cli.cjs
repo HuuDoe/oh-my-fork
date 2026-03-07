@@ -27645,7 +27645,8 @@ var EXPLORE_PROMPT_METADATA = {
     "Quick codebase exploration"
   ],
   avoidWhen: [
-    "External documentation lookup (use document-specialist)",
+    "External documentation, literature, or academic paper lookup (use document-specialist)",
+    "Database/reference/manual lookups outside the current project (use document-specialist)",
     "GitHub/npm package research (use document-specialist)",
     "Complex architectural analysis (use architect)",
     "When you already know the file location"
@@ -27653,7 +27654,7 @@ var EXPLORE_PROMPT_METADATA = {
 };
 var exploreAgent = {
   name: "explore",
-  description: "Fast codebase exploration and pattern search. Use for finding files, understanding structure, locating implementations. Searches INTERNAL codebase.",
+  description: "Fast codebase exploration and pattern search. Use for finding files, understanding structure, locating implementations. Searches INTERNAL codebase only; external docs, literature, papers, and reference databases belong to document-specialist.",
   prompt: loadAgentPrompt("explore"),
   model: "haiku",
   defaultModel: "haiku",
@@ -27669,14 +27670,17 @@ var DOCUMENT_SPECIALIST_PROMPT_METADATA = {
   triggers: [
     { domain: "External documentation", trigger: "API references, official docs" },
     { domain: "OSS implementations", trigger: "GitHub examples, package source" },
-    { domain: "Best practices", trigger: "Community patterns, recommendations" }
+    { domain: "Best practices", trigger: "Community patterns, recommendations" },
+    { domain: "Literature and reference research", trigger: "Academic papers, manuals, reference databases" }
   ],
   useWhen: [
     "Looking up official documentation",
     "Finding GitHub examples",
     "Researching npm/pip packages",
     "Stack Overflow solutions",
-    "External API references"
+    "External API references",
+    "Searching external literature or academic papers",
+    "Looking up manuals, databases, or reference material outside the current project"
   ],
   avoidWhen: [
     "Internal codebase search (use explore)",
@@ -27686,7 +27690,7 @@ var DOCUMENT_SPECIALIST_PROMPT_METADATA = {
 };
 var documentSpecialistAgent = {
   name: "document-specialist",
-  description: "Document Specialist for documentation research and external reference finding. Use for official docs, GitHub examples, OSS implementations, API references. Searches EXTERNAL resources, not internal codebase.",
+  description: "Document Specialist for documentation research and external reference finding. Use for official docs, GitHub examples, OSS implementations, API references, external literature, academic papers, and reference/database lookups. Searches EXTERNAL resources, not internal codebase.",
   prompt: loadAgentPrompt("document-specialist"),
   model: "sonnet",
   defaultModel: "sonnet",
@@ -64061,6 +64065,7 @@ Examples:
   omc team 3:claude "fix failing tests"
   omc team 2:codex:architect "design auth system"
   omc team 1:gemini:executor "implement feature"
+  omc team 1:codex,1:gemini "compare approaches"
   omc team status fix-failing-tests
   omc team shutdown fix-failing-tests
   omc team api send-message --input '{"team_name":"my-team","from_worker":"worker-1","to_worker":"leader-fixed","body":"ACK"}' --json
@@ -64148,10 +64153,11 @@ function assertTeamSpawnAllowed(env2 = process.env) {
     `Worker context (${workerIdentity}) cannot start/spawn new teams. Use only "omc team api ..." operations from worker sessions.`
   );
 }
+var SINGLE_SPEC_RE = /^(\d+)(?::([a-z][a-z0-9-]*)(?::([a-z][a-z0-9-]*))?)?$/i;
 function parseTeamArgs(tokens) {
   const args = [...tokens];
   let workerCount = 3;
-  let agentType = "claude";
+  let agentTypes = [];
   let json = false;
   const filteredArgs = [];
   for (const arg of args) {
@@ -64162,24 +64168,65 @@ function parseTeamArgs(tokens) {
     }
   }
   const first = filteredArgs[0] || "";
-  const match = first.match(/^(\d+)(?::([a-z][a-z0-9-]*)(?::([a-z][a-z0-9-]*))?)?$/i);
   let role;
-  if (match) {
-    const count = Number.parseInt(match[1], 10);
-    if (!Number.isFinite(count) || count < MIN_WORKER_COUNT || count > MAX_WORKER_COUNT) {
-      throw new Error(`Invalid worker count "${match[1]}". Expected ${MIN_WORKER_COUNT}-${MAX_WORKER_COUNT}.`);
+  let specMatched = false;
+  if (first.includes(",")) {
+    const segments = first.split(",");
+    const parsedSegments = [];
+    let allValid = true;
+    for (const seg of segments) {
+      const m = seg.match(SINGLE_SPEC_RE);
+      if (!m) {
+        allValid = false;
+        break;
+      }
+      const count = Number.parseInt(m[1], 10);
+      if (!Number.isFinite(count) || count < MIN_WORKER_COUNT || count > MAX_WORKER_COUNT) {
+        throw new Error(`Invalid worker count "${m[1]}". Expected ${MIN_WORKER_COUNT}-${MAX_WORKER_COUNT}.`);
+      }
+      parsedSegments.push({ count, type: m[2] || "claude", role: m[3] });
     }
-    workerCount = count;
-    if (match[2]) agentType = match[2];
-    if (match[3]) role = match[3];
-    filteredArgs.shift();
+    if (allValid && parsedSegments.length > 0) {
+      workerCount = 0;
+      for (const seg of parsedSegments) {
+        workerCount += seg.count;
+        for (let i = 0; i < seg.count; i++) {
+          agentTypes.push(seg.type);
+        }
+      }
+      if (workerCount > MAX_WORKER_COUNT) {
+        throw new Error(`Total worker count ${workerCount} exceeds maximum ${MAX_WORKER_COUNT}.`);
+      }
+      const roles = parsedSegments.map((s) => s.role);
+      const uniqueRoles = [...new Set(roles)];
+      if (uniqueRoles.length === 1 && uniqueRoles[0]) role = uniqueRoles[0];
+      specMatched = true;
+      filteredArgs.shift();
+    }
+  }
+  if (!specMatched) {
+    const match = first.match(SINGLE_SPEC_RE);
+    if (match) {
+      const count = Number.parseInt(match[1], 10);
+      if (!Number.isFinite(count) || count < MIN_WORKER_COUNT || count > MAX_WORKER_COUNT) {
+        throw new Error(`Invalid worker count "${match[1]}". Expected ${MIN_WORKER_COUNT}-${MAX_WORKER_COUNT}.`);
+      }
+      workerCount = count;
+      const type = match[2] || "claude";
+      if (match[3]) role = match[3];
+      agentTypes = Array.from({ length: workerCount }, () => type);
+      filteredArgs.shift();
+    }
+  }
+  if (agentTypes.length === 0) {
+    agentTypes = Array.from({ length: workerCount }, () => "claude");
   }
   const task = filteredArgs.join(" ").trim();
   if (!task) {
     throw new Error('Usage: omc team [N:agent-type] "<task description>"');
   }
   const teamName = slugifyTask(task);
-  return { workerCount, agentType, role, task, teamName, json };
+  return { workerCount, agentTypes, role, task, teamName, json };
 }
 function sampleValueForField(field) {
   switch (field) {
@@ -64340,22 +64387,22 @@ async function handleTeamStart(parsed, cwd2) {
   const { isRuntimeV2Enabled: isRuntimeV2Enabled2 } = await Promise.resolve().then(() => (init_runtime_v2(), runtime_v2_exports));
   if (isRuntimeV2Enabled2()) {
     const { startTeamV2: startTeamV22, monitorTeamV2: monitorTeamV22 } = await Promise.resolve().then(() => (init_runtime_v2(), runtime_v2_exports));
-    const agentTypes2 = Array.from({ length: parsed.workerCount }, () => parsed.agentType);
     const runtime2 = await startTeamV22({
       teamName: parsed.teamName,
       workerCount: parsed.workerCount,
-      agentTypes: agentTypes2,
+      agentTypes: parsed.agentTypes,
       tasks,
       cwd: cwd2,
       ...rolePrompt ? { roleName: parsed.role, rolePrompt } : {}
     });
+    const uniqueTypes = [...new Set(parsed.agentTypes)].join(",");
     if (parsed.json) {
       const snapshot3 = await monitorTeamV22(runtime2.teamName, cwd2);
       console.log(JSON.stringify({
         teamName: runtime2.teamName,
         sessionName: runtime2.sessionName,
         workerCount: runtime2.config.worker_count,
-        agentType: parsed.agentType,
+        agentType: uniqueTypes,
         tasks: snapshot3 ? snapshot3.tasks : null
       }));
       return;
@@ -64363,7 +64410,7 @@ async function handleTeamStart(parsed, cwd2) {
     console.log(`Team started: ${runtime2.teamName}`);
     console.log(`tmux session: ${runtime2.sessionName}`);
     console.log(`workers: ${runtime2.config.worker_count}`);
-    console.log(`agent_type: ${parsed.agentType}`);
+    console.log(`agent_type: ${uniqueTypes}`);
     const snapshot2 = await monitorTeamV22(runtime2.teamName, cwd2);
     if (snapshot2) {
       console.log(`tasks: total=${snapshot2.tasks.total} pending=${snapshot2.tasks.pending} in_progress=${snapshot2.tasks.in_progress} completed=${snapshot2.tasks.completed} failed=${snapshot2.tasks.failed}`);
@@ -64371,21 +64418,21 @@ async function handleTeamStart(parsed, cwd2) {
     return;
   }
   const { startTeam: startTeam2, monitorTeam: monitorTeam2 } = await Promise.resolve().then(() => (init_runtime(), runtime_exports));
-  const agentTypes = Array.from({ length: parsed.workerCount }, () => parsed.agentType);
   const runtime = await startTeam2({
     teamName: parsed.teamName,
     workerCount: parsed.workerCount,
-    agentTypes,
+    agentTypes: parsed.agentTypes,
     tasks,
     cwd: cwd2
   });
+  const uniqueTypesV1 = [...new Set(parsed.agentTypes)].join(",");
   if (parsed.json) {
     const snapshot2 = await monitorTeam2(runtime.teamName, cwd2, runtime.workerPaneIds);
     console.log(JSON.stringify({
       teamName: runtime.teamName,
       sessionName: runtime.sessionName,
       workerCount: runtime.workerNames.length,
-      agentType: parsed.agentType,
+      agentType: uniqueTypesV1,
       tasks: snapshot2 ? {
         total: snapshot2.taskCounts.pending + snapshot2.taskCounts.inProgress + snapshot2.taskCounts.completed + snapshot2.taskCounts.failed,
         pending: snapshot2.taskCounts.pending,
@@ -64399,7 +64446,7 @@ async function handleTeamStart(parsed, cwd2) {
   console.log(`Team started: ${runtime.teamName}`);
   console.log(`tmux session: ${runtime.sessionName}`);
   console.log(`workers: ${runtime.workerNames.length}`);
-  console.log(`agent_type: ${parsed.agentType}`);
+  console.log(`agent_type: ${uniqueTypesV1}`);
   const snapshot = await monitorTeam2(runtime.teamName, cwd2, runtime.workerPaneIds);
   if (snapshot) {
     console.log(`tasks: total=${snapshot.taskCounts.pending + snapshot.taskCounts.inProgress + snapshot.taskCounts.completed + snapshot.taskCounts.failed} pending=${snapshot.taskCounts.pending} in_progress=${snapshot.taskCounts.inProgress} completed=${snapshot.taskCounts.completed} failed=${snapshot.taskCounts.failed}`);

@@ -318,9 +318,9 @@ describe('Installer Constants', () => {
 
   describe('extractOmcVersionFromClaudeMd()', () => {
     it('prefers the OMC version marker', () => {
-      const content = `<!-- OMC:VERSION:4.7.6 -->
+      const content = `<!-- OMC:VERSION:4.7.7 -->
 # oh-my-claudecode - Intelligent Multi-Agent Orchestration`;
-      expect(extractOmcVersionFromClaudeMd(content)).toBe('v4.7.6');
+      expect(extractOmcVersionFromClaudeMd(content)).toBe('v4.7.7');
     });
 
     it('falls back to legacy heading versions', () => {
@@ -337,13 +337,13 @@ describe('Installer Constants', () => {
 
       const changed = syncPersistedSetupVersion({
         configPath,
-        version: '4.7.6',
+        version: '4.7.7',
         onlyIfConfigured: true,
       });
 
       const updated = JSON.parse(readFileSync(configPath, 'utf-8'));
       expect(changed).toBe(true);
-      expect(updated.setupVersion).toBe('v4.7.6');
+      expect(updated.setupVersion).toBe('v4.7.7');
       expect(updated.setupCompleted).toBe('2026-03-03T17:59:08+09:00');
     });
 
@@ -354,7 +354,7 @@ describe('Installer Constants', () => {
 
       const changed = syncPersistedSetupVersion({
         configPath,
-        version: '4.7.6',
+        version: '4.7.7',
         onlyIfConfigured: true,
       });
 

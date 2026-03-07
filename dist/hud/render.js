@@ -209,18 +209,21 @@ export async function render(context, config) {
             elements.push(bold(`[OMC${versionTag}]`));
         }
     }
-    // Rate limits (5h and weekly) - show error indicator or data
+    // Rate limits (5h and weekly) - data takes priority over error indicator
     if (enabledElements.rateLimits && context.rateLimitsResult) {
-        const errorIndicator = renderRateLimitsError(context.rateLimitsResult);
-        if (errorIndicator) {
-            elements.push(errorIndicator);
-        }
-        else if (context.rateLimitsResult.rateLimits) {
+        if (context.rateLimitsResult.rateLimits) {
+            // Data available (possibly stale from 429) → always show data
             const limits = enabledElements.useBars
                 ? renderRateLimitsWithBar(context.rateLimitsResult.rateLimits)
                 : renderRateLimits(context.rateLimitsResult.rateLimits);
             if (limits)
                 elements.push(limits);
+        }
+        else {
+            // No data → show error indicator
+            const errorIndicator = renderRateLimitsError(context.rateLimitsResult);
+            if (errorIndicator)
+                elements.push(errorIndicator);
         }
     }
     // Custom rate limit buckets

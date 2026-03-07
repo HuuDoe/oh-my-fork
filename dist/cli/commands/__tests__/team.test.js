@@ -2,7 +2,7 @@ import { describe, it, expect, afterEach } from 'vitest';
 import { mkdtemp, rm, mkdir, writeFile } from 'fs/promises';
 import { join } from 'path';
 import { tmpdir } from 'os';
-import { teamCommand } from '../team.js';
+import { teamCommand, parseTeamArgs } from '../team.js';
 /** Helper: capture console.log output during a callback */
 async function captureLog(fn) {
     const logs = [];
@@ -172,6 +172,55 @@ describe('teamCommand api operations', () => {
             process.env.OMC_TEAM_WORKER = previousWorker;
             process.exitCode = 0;
         }
+    });
+});
+describe('parseTeamArgs comma-separated multi-type specs', () => {
+    it('parses 1:codex,1:gemini into heterogeneous agentTypes', () => {
+        const parsed = parseTeamArgs(['1:codex,1:gemini', 'do the task']);
+        expect(parsed.workerCount).toBe(2);
+        expect(parsed.agentTypes).toEqual(['codex', 'gemini']);
+        expect(parsed.task).toBe('do the task');
+    });
+    it('parses 2:claude,1:codex:architect with mixed counts and roles', () => {
+        const parsed = parseTeamArgs(['2:claude,1:codex:architect', 'design system']);
+        expect(parsed.workerCount).toBe(3);
+        expect(parsed.agentTypes).toEqual(['claude', 'claude', 'codex']);
+        expect(parsed.role).toBeUndefined(); // mixed roles -> no single role
+        expect(parsed.task).toBe('design system');
+    });
+    it('sets role when all segments share the same role', () => {
+        const parsed = parseTeamArgs(['1:codex:executor,2:gemini:executor', 'run tasks']);
+        expect(parsed.workerCount).toBe(3);
+        expect(parsed.agentTypes).toEqual(['codex', 'gemini', 'gemini']);
+        expect(parsed.role).toBe('executor');
+    });
+    it('still parses single-type spec 3:codex into uniform agentTypes', () => {
+        const parsed = parseTeamArgs(['3:codex', 'fix tests']);
+        expect(parsed.workerCount).toBe(3);
+        expect(parsed.agentTypes).toEqual(['codex', 'codex', 'codex']);
+        expect(parsed.task).toBe('fix tests');
+    });
+    it('defaults to 3 claude workers when no spec is given', () => {
+        const parsed = parseTeamArgs(['run all tests']);
+        expect(parsed.workerCount).toBe(3);
+        expect(parsed.agentTypes).toEqual(['claude', 'claude', 'claude']);
+        expect(parsed.task).toBe('run all tests');
+    });
+    it('parses single spec with role correctly', () => {
+        const parsed = parseTeamArgs(['2:codex:architect', 'design auth']);
+        expect(parsed.workerCount).toBe(2);
+        expect(parsed.agentTypes).toEqual(['codex', 'codex']);
+        expect(parsed.role).toBe('architect');
+    });
+    it('supports --json flag with comma-separated specs', () => {
+        const parsed = parseTeamArgs(['1:codex,1:gemini', '--json', 'compare']);
+        expect(parsed.workerCount).toBe(2);
+        expect(parsed.agentTypes).toEqual(['codex', 'gemini']);
+        expect(parsed.json).toBe(true);
+        expect(parsed.task).toBe('compare');
+    });
+    it('throws on total count exceeding maximum', () => {
+        expect(() => parseTeamArgs(['15:codex,10:gemini', 'big task'])).toThrow('exceeds maximum');
     });
 });
 //# sourceMappingURL=team.test.js.map
