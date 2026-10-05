@@ -10,7 +10,7 @@ def log(*a): print("[bot]", *a, flush=True)
 
 os.environ["HF_HUB_DISABLE_XET"] = "1"
 if not os.environ.get("BOT_DEPS_DONE"):
-    sh("pip install --quiet playwright requests vosk soundfile 'faster-whisper' 'huggingface_hub==0.34.4' 2>&1 | tail -2")
+    sh("pip install --quiet playwright requests vosk soundfile 'faster-whisper' 'huggingface_hub==0.34.4' 'av>=14.0.0' 2>&1 | tail -2")
     sh("pip list 2>/dev/null | grep -iE 'huggingface|whisper|vosk|speechrecognition'")
     sh("sudo apt-get install -y xvfb >/dev/null 2>&1; python3 -m playwright install --with-deps chromium 2>&1 | tail -3")
     sh("python3 -c \"from faster_whisper import WhisperModel; WhisperModel('tiny.en',device='cpu',compute_type='int8'); print('FW_PRELOAD_OK')\" 2>&1 | tail -5")
