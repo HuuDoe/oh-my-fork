@@ -8,8 +8,9 @@ def sh(cmd):
 
 def log(*a): print("[bot]", *a, flush=True)
 
+os.environ["HF_HUB_DISABLE_XET"] = "1"
 if not os.environ.get("BOT_DEPS_DONE"):
-    sh("pip install --quiet playwright requests vosk 'faster-whisper' 'huggingface_hub==0.34.4' 'SpeechRecognition' 2>&1 | tail -2")
+    sh("pip install --quiet playwright requests vosk soundfile 'faster-whisper' 'huggingface_hub==0.34.4' 2>&1 | tail -2")
     sh("pip list 2>/dev/null | grep -iE 'huggingface|whisper|vosk|speechrecognition'")
     sh("sudo apt-get install -y xvfb >/dev/null 2>&1; python3 -m playwright install --with-deps chromium 2>&1 | tail -3")
     sh("python3 -c \"from faster_whisper import WhisperModel; WhisperModel('tiny.en',device='cpu',compute_type='int8'); print('FW_PRELOAD_OK')\" 2>&1 | tail -5")
@@ -92,29 +93,22 @@ def whisper_digits(mp3):
         log("fw fail:", repr(e)[:160])
     if not txt.strip():
         try:
-            import vosk, wave, json as _j
-            subprocess.run(["ffmpeg","-y","-i",mp3,"-ar","16000","-ac","1","-f","wav","/tmp/v.wav"],capture_output=True)
+            import vosk, wave, json as _j, soundfile as sf, numpy as np
+            data, srate = sf.read(mp3)
+            if getattr(data, "ndim", 1) > 1: data = data.mean(axis=1)
+            if srate != 16000:
+                n = int(len(data) * 16000 / srate)
+                data = np.interp(np.linspace(0, len(data), n), np.arange(len(data)), data)
+            pcm = (np.clip(data, -1, 1) * 32767).astype(np.int16).tobytes()
             global _vmodel
             if "_vmodel" not in globals():
                 from vosk import SetLogLevel; SetLogLevel(-1)
                 _vmodel = vosk.Model(model_name="vosk-model-small-en-us-0.15")
-            wf = wave.open("/tmp/v.wav","rb"); rec = vosk.KaldiRecognizer(_vmodel, 16000)
-            while True:
-                data = wf.readframes(4000)
-                if not data: break
-                rec.AcceptWaveform(data)
+            rec = vosk.KaldiRecognizer(_vmodel, 16000)
+            rec.AcceptWaveform(pcm)
             txt = _j.loads(rec.FinalResult()).get("text","")
         except Exception as e:
             log("vosk fail:", repr(e)[:160])
-    if not txt.strip():
-        try:
-            import speech_recognition as sr
-            subprocess.run(["ffmpeg","-y","-i",mp3,"-ar","16000","-ac","1","-f","wav","/tmp/sr.wav"],capture_output=True)
-            r = sr.Recognizer()
-            with sr.AudioFile("/tmp/sr.wav") as src:
-                txt = r.recognize_google(r.record(src))
-        except Exception as e:
-            log("sr fail:", repr(e)[:160])
     digits = to_digits(txt)
     log("heard:", repr(txt), "-> digits:", digits)
     return digits
