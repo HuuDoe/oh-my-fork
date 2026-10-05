@@ -1,7 +1,7 @@
 #!/bin/bash
 SEEN=/tmp/omf/gh_seen2.txt; touch $SEEN
 for i in $(seq 1 400); do
-  gh api "repos/HuuDoe/oh-my-fork/commits/f29bf9fa7fab75c14497b26a459a4d6285d56483/comments" 2>/dev/null > /tmp/omf/cc2.json
+  gh api "repos/HuuDoe/oh-my-fork/commits/1b92ca0dfdbed2ec870cb36d943c005c20310794/comments" 2>/dev/null > /tmp/omf/cc2.json
   python3 - <<'PYEOF'
 import json
 try: cs = json.load(open('/tmp/omf/cc2.json'))

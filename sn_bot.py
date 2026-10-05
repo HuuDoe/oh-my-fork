@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """ServiceNow ID signup + PDI provisioning bot (runs on GH Actions runner)."""
-import os, sys, re, json, time, base64, subprocess, urllib.request
+import os, sys, re, json, time, base64, subprocess, urllib.request, hashlib
 
 def sh(cmd):
     print("$", cmd, flush=True)
@@ -104,12 +104,18 @@ def decode_pcm(mp3):
         data = np.interp(np.linspace(0, len(data), n), np.arange(len(data)), data).astype(np.float32)
     return data
 
-def hitl_solve(mp3, rnd, wait_s=150):
-    """Post mp3 as base64 in a commit comment; poll comments for ANS <rnd>."""
+_posted_ch = set()
+
+def hitl_solve(mp3, rnd, wait_s=90):
+    """Post mp3 as base64 in a commit comment (once per unique challenge); poll for ANS <ch>."""
     try:
-        b64 = base64.b64encode(open(mp3, "rb").read()).decode()
-        gh_post(f"REQ {rnd}\nB64:{b64}")
-        log(f"AWAIT {rnd} posted b64 ({len(b64)} chars)")
+        raw = open(mp3, "rb").read()
+        ch = hashlib.md5(raw).hexdigest()[:6]
+        if ch not in _posted_ch:
+            b64 = base64.b64encode(raw).decode()
+            gh_post(f"REQ {ch}\nB64:{b64}")
+            _posted_ch.add(ch)
+            log(f"AWAIT ch{ch} posted b64 ({len(b64)} chars)")
     except Exception as e:
         log("upload fail", e); return ""
     end = time.time() + wait_s
@@ -119,7 +125,7 @@ def hitl_solve(mp3, rnd, wait_s=150):
                               headers=GH, timeout=15).json()
             for c in cs:
                 m = c.get("body", "")
-                if m.startswith(f"ANS {rnd} "):
+                if m.startswith(f"ANS {ch} "):
                     return "".join(re.findall(r"\d", m))
         except Exception:
             pass
@@ -244,13 +250,21 @@ for EMAIL in EMAILS:
             if not href:
                 log("no audio link"); status(f"r{rnd} nolink btxt={btxt[:60]!r}"); continue
             mp3 = f"/tmp/rnd{rnd}.mp3"
-            try:
-                r = page.context.request.get(href, timeout=30000)
-                data = r.body()
-                if len(data) < 500: raise Exception(f"bad payload {len(data)}")
-                open(mp3, "wb").write(data)
-            except Exception as e:
-                log("mp3 dl fail", e); status(f"r{rnd} dlfail {repr(e)[:60]}"); continue
+            global cur_mp3, last_href
+            try: last_href
+            except NameError: last_href = None; cur_mp3 = None
+            if href == last_href and cur_mp3:
+                mp3 = cur_mp3
+                log(f"r{rnd} reuse mp3")
+            else:
+                try:
+                    r = page.context.request.get(href, timeout=30000)
+                    data = r.body()
+                    if len(data) < 500: raise Exception(f"bad payload {len(data)}")
+                    open(mp3, "wb").write(data)
+                    last_href = href; cur_mp3 = mp3
+                except Exception as e:
+                    log("mp3 dl fail", e); status(f"r{rnd} dlfail {repr(e)[:60]}"); continue
             ans = whisper_digits(mp3)
             status(f"r{rnd} heard_ans={ans!r}")
             if len(ans) < 5:
