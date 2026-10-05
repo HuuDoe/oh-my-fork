@@ -18,7 +18,7 @@ if not os.environ.get("BOT_DEPS_DONE"):
     sh("pip install --quiet playwright requests vosk soundfile 'faster-whisper' 'huggingface_hub==0.34.4' 'av>=17.0.0' 2>&1 | tail -2")
     sh("pip list 2>/dev/null | grep -iE 'huggingface|whisper|vosk|av |soundfile'")
     sh("sudo apt-get install -y xvfb >/dev/null 2>&1; python3 -m playwright install --with-deps chromium 2>&1 | tail -3")
-    sh("python3 -c \"from faster_whisper import WhisperModel; WhisperModel('base.en',device='cpu',compute_type='int8'); print('FW_PRELOAD_OK')\" 2>&1 | tail -5")
+    sh("python3 -c \"from faster_whisper import WhisperModel; WhisperModel( 'small.en',device='cpu',compute_type='int8'); print('FW_PRELOAD_OK')\" 2>&1 | tail -5")
     sh("python3 -c \"import vosk; vosk.Model(model_name='vosk-model-small-en-us-0.15'); print('VOSK_PRELOAD_OK')\" 2>&1 | tail -5")
     os.environ["BOT_DEPS_DONE"] = "1"
     os.execvp("xvfb-run", ["xvfb-run", "-a", sys.executable, os.path.abspath(__file__)])
@@ -97,7 +97,7 @@ def decode_pcm(mp3):
 
 log("NTFY TOPIC:", NTFY)
 
-def hitl_solve(mp3, rnd, wait_s=110):
+def hitl_solve(mp3, rnd, wait_s=140):
     """Upload mp3 to 0x0.st; announce on ntfy; poll for ANS digits."""
     try:
         out = subprocess.check_output(
@@ -134,7 +134,7 @@ def whisper_digits(mp3):
         from faster_whisper import WhisperModel
         global _model
         if "_model" not in globals():
-            _model = WhisperModel("base.en", device="cpu", compute_type="int8")
+            _model = WhisperModel("small.en", device="cpu", compute_type="int8")
         segs, _ = _model.transcribe(decode_pcm(mp3), beam_size=5)
         txt = " ".join(s.text for s in segs)
     except Exception as e:
