@@ -156,14 +156,19 @@ for EMAIL in EMAILS:
                     log("audio btn fail", e)
             if re.search(r"automated queries|unusual traffic", btxt, re.I):
                 blocked = True; break
-            try:
-                href = bf.locator(".rc-audiochallenge-tdownload-link").get_attribute("href", timeout=8000)
-            except Exception:
-                href = None
+            href = None
+            for _try in range(6):
+                try:
+                    href = bf.locator(".rc-audiochallenge-tdownload-link").get_attribute("href", timeout=4000)
+                except Exception:
+                    href = None
+                if href: break
+                page.wait_for_timeout(1500)
             if not href:
                 log("no audio link"); continue
             mp3 = f"/tmp/rnd{rnd}.mp3"
-            try: urllib.request.urlretrieve(href, mp3)
+            try:
+                open(mp3, "wb").write(requests.get(href, timeout=30).content)
             except Exception as e:
                 log("mp3 dl fail", e); continue
             ans = whisper_digits(mp3)
