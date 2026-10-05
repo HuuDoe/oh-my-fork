@@ -9,8 +9,11 @@ def sh(cmd):
 def log(*a): print("[bot]", *a, flush=True)
 
 if not os.environ.get("BOT_DEPS_DONE"):
-    sh("pip install --quiet playwright requests vosk 'faster-whisper' 'huggingface_hub==0.34.4' 2>&1 | tail -2")
+    sh("pip install --quiet playwright requests vosk 'faster-whisper' 'huggingface_hub==0.34.4' 'SpeechRecognition' 2>&1 | tail -2")
+    sh("pip list 2>/dev/null | grep -iE 'huggingface|whisper|vosk|speechrecognition'")
     sh("sudo apt-get install -y xvfb >/dev/null 2>&1; python3 -m playwright install --with-deps chromium 2>&1 | tail -3")
+    sh("python3 -c \"from faster_whisper import WhisperModel; WhisperModel('tiny.en',device='cpu',compute_type='int8'); print('FW_PRELOAD_OK')\" 2>&1 | tail -5")
+    sh("python3 -c \"import vosk; vosk.Model(model_name='vosk-model-small-en-us-0.15'); print('VOSK_PRELOAD_OK')\" 2>&1 | tail -5")
     os.environ["BOT_DEPS_DONE"] = "1"
     os.execvp("xvfb-run", ["xvfb-run", "-a", sys.executable, os.path.abspath(__file__)])
     sys.exit(0)
@@ -94,7 +97,7 @@ def whisper_digits(mp3):
             global _vmodel
             if "_vmodel" not in globals():
                 from vosk import SetLogLevel; SetLogLevel(-1)
-                _vmodel = vosk.Model("small-en")
+                _vmodel = vosk.Model(model_name="vosk-model-small-en-us-0.15")
             wf = wave.open("/tmp/v.wav","rb"); rec = vosk.KaldiRecognizer(_vmodel, 16000)
             while True:
                 data = wf.readframes(4000)
@@ -103,6 +106,15 @@ def whisper_digits(mp3):
             txt = _j.loads(rec.FinalResult()).get("text","")
         except Exception as e:
             log("vosk fail:", repr(e)[:160])
+    if not txt.strip():
+        try:
+            import speech_recognition as sr
+            subprocess.run(["ffmpeg","-y","-i",mp3,"-ar","16000","-ac","1","-f","wav","/tmp/sr.wav"],capture_output=True)
+            r = sr.Recognizer()
+            with sr.AudioFile("/tmp/sr.wav") as src:
+                txt = r.recognize_google(r.record(src))
+        except Exception as e:
+            log("sr fail:", repr(e)[:160])
     digits = to_digits(txt)
     log("heard:", repr(txt), "-> digits:", digits)
     return digits
