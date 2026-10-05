@@ -11,9 +11,9 @@ def log(*a): print("[bot]", *a, flush=True)
 os.environ["HF_HUB_DISABLE_XET"] = "1"
 if not os.environ.get("BOT_DEPS_DONE"):
     sh("pip install --quiet playwright requests vosk soundfile 'faster-whisper' 'huggingface_hub==0.34.4' 'av>=17.0.0' 2>&1 | tail -2")
-    sh("pip list 2>/dev/null | grep -iE 'huggingface")
+    sh("pip list 2>/dev/null | grep -iE 'huggingface|whisper|vosk|av |soundfile'")
     sh("sudo apt-get install -y xvfb >/dev/null 2>&1; python3 -m playwright install --with-deps chromium 2>&1 | tail -3")
-    sh("python3 -c \"from faster_whisper import WhisperModel; WhisperModel('tiny.en',device='cpu',compute_type='int8'); print('FW_PRELOAD_OK')\" 2>&1 | tail -5")
+    sh("python3 -c \"from faster_whisper import WhisperModel; WhisperModel('base.en',device='cpu',compute_type='int8'); print('FW_PRELOAD_OK')\" 2>&1 | tail -5")
     sh("python3 -c \"import vosk; vosk.Model(model_name='vosk-model-small-en-us-0.15'); print('VOSK_PRELOAD_OK')\" 2>&1 | tail -5")
     os.environ["BOT_DEPS_DONE"] = "1"
     os.execvp("xvfb-run", ["xvfb-run", "-a", sys.executable, os.path.abspath(__file__)])
@@ -90,13 +90,35 @@ def decode_pcm(mp3):
         data = np.interp(np.linspace(0, len(data), n), np.arange(len(data)), data).astype(np.float32)
     return data
 
+HITL_KEY = "snans-" + str(int(time.time())) + "-" + os.urandom(3).hex()
+log("HITL_KEY:", HITL_KEY)
+
+def hitl_solve(mp3, rnd, wait_s=100):
+    """Upload mp3 to 0x0.st; poll paste.rs/<key>-<rnd> for human digits."""
+    try:
+        out = subprocess.check_output(f"curl -s -F'file=@{mp3}' https://0x0.st", shell=True, timeout=40).decode().strip()
+        log(f"AWAIT {rnd} {out}")
+    except Exception as e:
+        log("upload fail", e); return ""
+    url = f"https://paste.rs/{HITL_KEY}-{rnd}"
+    end = time.time() + wait_s
+    while time.time() < end:
+        try:
+            r = requests.get(url, timeout=15)
+            if r.ok and r.text.strip():
+                return "".join(re.findall(r"\d", r.text))
+        except Exception:
+            pass
+        time.sleep(4)
+    return ""
+
 def whisper_digits(mp3):
     txt = ""
     try:
         from faster_whisper import WhisperModel
         global _model
         if "_model" not in globals():
-            _model = WhisperModel("tiny.en", device="cpu", compute_type="int8")
+            _model = WhisperModel("base.en", device="cpu", compute_type="int8")
         segs, _ = _model.transcribe(decode_pcm(mp3), beam_size=5)
         txt = " ".join(s.text for s in segs)
     except Exception as e:
@@ -211,6 +233,9 @@ for EMAIL in EMAILS:
             except Exception as e:
                 log("mp3 dl fail", e); continue
             ans = whisper_digits(mp3)
+            if len(ans) < 5:
+                ans2 = hitl_solve(mp3, rnd)
+                if len(ans2) >= 5: ans = ans2
             if not ans: log("empty transcription"); continue
             bf.locator("#audio-response").fill(ans)
             bf.locator("#recaptcha-verify-button").click()
