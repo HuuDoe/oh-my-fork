@@ -80,6 +80,16 @@ def to_digits(txt):
             if w in WORD2NUM: d += WORD2NUM[w]
     return d
 
+def decode_pcm(mp3):
+    import soundfile as sf, numpy as np
+    data, srate = sf.read(mp3)
+    if getattr(data, "ndim", 1) > 1: data = data.mean(axis=1)
+    data = np.asarray(data, dtype=np.float32)
+    if srate != 16000:
+        n = int(len(data) * 16000 / srate)
+        data = np.interp(np.linspace(0, len(data), n), np.arange(len(data)), data).astype(np.float32)
+    return data
+
 def whisper_digits(mp3):
     txt = ""
     try:
@@ -87,19 +97,14 @@ def whisper_digits(mp3):
         global _model
         if "_model" not in globals():
             _model = WhisperModel("tiny.en", device="cpu", compute_type="int8")
-        segs, _ = _model.transcribe(mp3, beam_size=5)
+        segs, _ = _model.transcribe(decode_pcm(mp3), beam_size=5)
         txt = " ".join(s.text for s in segs)
     except Exception as e:
         import traceback as _tb; log("fw fail:", _tb.format_exc()[-400:])
     if not txt.strip():
         try:
-            import vosk, wave, json as _j, soundfile as sf, numpy as np
-            data, srate = sf.read(mp3)
-            if getattr(data, "ndim", 1) > 1: data = data.mean(axis=1)
-            if srate != 16000:
-                n = int(len(data) * 16000 / srate)
-                data = np.interp(np.linspace(0, len(data), n), np.arange(len(data)), data)
-            pcm = (np.clip(data, -1, 1) * 32767).astype(np.int16).tobytes()
+            import vosk, json as _j, numpy as np
+            pcm = (np.clip(decode_pcm(mp3), -1, 1) * 32767).astype(np.int16).tobytes()
             global _vmodel
             if "_vmodel" not in globals():
                 from vosk import SetLogLevel; SetLogLevel(-1)
