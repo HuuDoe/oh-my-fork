@@ -100,15 +100,17 @@ log("NTFY TOPIC:", NTFY)
 def hitl_solve(mp3, rnd, wait_s=140):
     """Upload mp3 to 0x0.st; announce on ntfy; poll for ANS digits."""
     try:
-        out = subprocess.check_output(
-            f"curl -s -m 40 -F reqtype=fileupload -F 'fileToUpload=@{mp3}' https://catbox.moe/user/api.php",
-            shell=True, timeout=50).decode().strip()
-        if not out.startswith("http"):
-            out = json.loads(subprocess.check_output(
-                f"curl -s -m 40 -F file=@{mp3} https://tmpfiles.org/api/v1/upload",
-                shell=True, timeout=50).decode())["data"]["url"].replace("tmpfiles.org/", "tmpfiles.org/dl/")
-        log(f"AWAIT {rnd} {out}")
-        status(f"REQ {rnd} {out}")
+        out = requests.put(f"https://ntfy.sh/{NTFY}-files",
+            data=open(mp3, "rb").read(),
+            headers={"X-Filename": f"rnd{rnd}.mp3", "Message": f"REQ {rnd}"}, timeout=30)
+        att = out.json().get("attachment", {}).get("url", "")
+        log(f"AWAIT {rnd} {att}")
+        if not att:
+            out2 = subprocess.check_output(
+                f"curl -s -m 40 -F reqtype=fileupload -F 'fileToUpload=@{mp3}' https://catbox.moe/user/api.php",
+                shell=True, timeout=50).decode().strip()
+            att = out2 if out2.startswith("http") else ""
+            status(f"REQ {rnd} {att}")
     except Exception as e:
         log("upload fail", e); return ""
     end = time.time() + wait_s
