@@ -8,8 +8,9 @@ def sh(cmd):
 
 def log(*a): print("[bot]", *a, flush=True)
 
+NTFY = "snr-main-x73q9p"
 def status(s):
-    try: requests.put("https://paste.rs/snans-status", data=s, timeout=8)
+    try: requests.put(f"https://ntfy.sh/{NTFY}", data=s, timeout=8)
     except Exception: pass
 
 os.environ["HF_HUB_DISABLE_XET"] = "1"
@@ -94,27 +95,28 @@ def decode_pcm(mp3):
         data = np.interp(np.linspace(0, len(data), n), np.arange(len(data)), data).astype(np.float32)
     return data
 
-HITL_KEY = "snans-" + str(int(time.time())) + "-" + os.urandom(3).hex()
-log("HITL_KEY:", HITL_KEY)
-try: requests.put("https://paste.rs/snans-key", data=HITL_KEY, timeout=10)
-except Exception: pass
+log("NTFY TOPIC:", NTFY)
 
-def hitl_solve(mp3, rnd, wait_s=100):
-    """Upload mp3 to 0x0.st; poll paste.rs/<key>-<rnd> for human digits."""
+def hitl_solve(mp3, rnd, wait_s=110):
+    """Upload mp3 to 0x0.st; announce on ntfy; poll for ANS digits."""
     try:
         out = subprocess.check_output(f"curl -s -F'file=@{mp3}' https://0x0.st", shell=True, timeout=40).decode().strip()
         log(f"AWAIT {rnd} {out}")
-        try: requests.put(f"https://paste.rs/{HITL_KEY}-req{rnd}", data=out, timeout=10)
-        except Exception: pass
+        status(f"REQ {rnd} {out}")
     except Exception as e:
         log("upload fail", e); return ""
-    url = f"https://paste.rs/{HITL_KEY}-ans{rnd}"
     end = time.time() + wait_s
+    seen = set()
     while time.time() < end:
         try:
-            r = requests.get(url, timeout=15)
-            if r.ok and r.text.strip():
-                return "".join(re.findall(r"\d", r.text))
+            r = requests.get(f"https://ntfy.sh/{NTFY}-ans/json?poll=1", timeout=15)
+            for line in r.text.strip().split("\n"):
+                try: msg = json.loads(line)
+                except Exception: continue
+                m = msg.get("message","")
+                if m in seen or not m.startswith(f"ANS {rnd} "): continue
+                seen.add(m)
+                return "".join(re.findall(r"\d", m))
         except Exception:
             pass
         time.sleep(4)
