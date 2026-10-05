@@ -9,7 +9,7 @@ def sh(cmd):
 def log(*a): print("[bot]", *a, flush=True)
 
 if not os.environ.get("BOT_DEPS_DONE"):
-    sh("pip install --quiet playwright faster-whisper requests 2>&1 | tail -2")
+    sh("pip install --quiet playwright requests vosk 'faster-whisper' 'huggingface_hub==0.34.4' 2>&1 | tail -2")
     sh("sudo apt-get install -y xvfb >/dev/null 2>&1; python3 -m playwright install --with-deps chromium 2>&1 | tail -3")
     os.environ["BOT_DEPS_DONE"] = "1"
     os.execvp("xvfb-run", ["xvfb-run", "-a", sys.executable, os.path.abspath(__file__)])
@@ -68,14 +68,42 @@ def md_poll(email, minutes=4):
         time.sleep(10)
     return None, []
 
+WORD2NUM = {"zero":"0","one":"1","two":"2","three":"3","four":"4","five":"5","six":"6","seven":"7","eight":"8","nine":"9","oh":"0","o":"0"}
+def to_digits(txt):
+    d = "".join(re.findall(r"\d", txt))
+    if len(d) < 5:
+        for w in re.findall(r"[a-z]+", txt.lower()):
+            if w in WORD2NUM: d += WORD2NUM[w]
+    return d
+
 def whisper_digits(mp3):
-    from faster_whisper import WhisperModel
-    global _model
-    if "_model" not in globals():
-        _model = WhisperModel("tiny.en", device="cpu", compute_type="int8")
-    segs, _ = _model.transcribe(mp3, beam_size=5)
-    txt = " ".join(s.text for s in segs)
-    digits = "".join(re.findall(r"\d", txt))
+    txt = ""
+    try:
+        from faster_whisper import WhisperModel
+        global _model
+        if "_model" not in globals():
+            _model = WhisperModel("tiny.en", device="cpu", compute_type="int8")
+        segs, _ = _model.transcribe(mp3, beam_size=5)
+        txt = " ".join(s.text for s in segs)
+    except Exception as e:
+        log("fw fail:", repr(e)[:160])
+    if not txt.strip():
+        try:
+            import vosk, wave, json as _j
+            subprocess.run(["ffmpeg","-y","-i",mp3,"-ar","16000","-ac","1","-f","wav","/tmp/v.wav"],capture_output=True)
+            global _vmodel
+            if "_vmodel" not in globals():
+                from vosk import SetLogLevel; SetLogLevel(-1)
+                _vmodel = vosk.Model("small-en")
+            wf = wave.open("/tmp/v.wav","rb"); rec = vosk.KaldiRecognizer(_vmodel, 16000)
+            while True:
+                data = wf.readframes(4000)
+                if not data: break
+                rec.AcceptWaveform(data)
+            txt = _j.loads(rec.FinalResult()).get("text","")
+        except Exception as e:
+            log("vosk fail:", repr(e)[:160])
+    digits = to_digits(txt)
     log("heard:", repr(txt), "-> digits:", digits)
     return digits
 
