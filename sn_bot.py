@@ -212,7 +212,7 @@ for EMAIL in EMAILS:
             try: btxt = bf.locator("body").inner_text(timeout=5000)
             except Exception: btxt = ""
             log(f"round {rnd}: toklen={len(token)} btxt[:140]={btxt[:140]!r}")
-            status(f"round {rnd} toklen={len(token)}")
+            status(f"round {rnd} toklen={len(token)} btxt={btxt[:80]!r}")
             if re.search(r"automated queries|unusual traffic|try again later", btxt, re.I):
                 blocked = True; break
             if "expired" in btxt.lower():
@@ -255,11 +255,16 @@ for EMAIL in EMAILS:
             if len(ans) < 5:
                 ans2 = hitl_solve(mp3, rnd)
                 if len(ans2) >= 5: ans = ans2
-            if not ans: log("empty transcription"); continue
+            if not ans: log("empty transcription"); status(f"r{rnd} noans"); continue
             bf.locator("#audio-response").fill(ans)
             bf.locator("#recaptcha-verify-button").click()
             log("submitted audio answer:", ans)
+            status(f"r{rnd} sub={ans}")
             page.wait_for_timeout(3000)
+            try:
+                vtxt = bf.locator("body").inner_text(timeout=3000)
+                status(f"r{rnd} post={vtxt[:80]!r}")
+            except Exception: pass
 
         page.screenshot(path="/tmp/s2_aftercap.png")
         log("captcha result: token_len=", len(token), "blocked=", blocked)
