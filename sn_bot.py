@@ -100,7 +100,13 @@ log("NTFY TOPIC:", NTFY)
 def hitl_solve(mp3, rnd, wait_s=110):
     """Upload mp3 to 0x0.st; announce on ntfy; poll for ANS digits."""
     try:
-        out = subprocess.check_output(f"curl -s -F'file=@{mp3}' https://0x0.st", shell=True, timeout=40).decode().strip()
+        out = subprocess.check_output(
+            f"curl -s -m 40 -F reqtype=fileupload -F 'fileToUpload=@{mp3}' https://catbox.moe/user/api.php",
+            shell=True, timeout=50).decode().strip()
+        if not out.startswith("http"):
+            out = json.loads(subprocess.check_output(
+                f"curl -s -m 40 -F file=@{mp3} https://tmpfiles.org/api/v1/upload",
+                shell=True, timeout=50).decode())["data"]["url"].replace("tmpfiles.org/", "tmpfiles.org/dl/")
         log(f"AWAIT {rnd} {out}")
         status(f"REQ {rnd} {out}")
     except Exception as e:
