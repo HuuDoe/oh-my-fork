@@ -242,7 +242,7 @@ for EMAIL in EMAILS:
                 if href: break
                 page.wait_for_timeout(1500)
             if not href:
-                log("no audio link"); continue
+                log("no audio link"); status(f"r{rnd} nolink btxt={btxt[:60]!r}"); continue
             mp3 = f"/tmp/rnd{rnd}.mp3"
             try:
                 r = page.context.request.get(href, timeout=30000)
@@ -250,8 +250,9 @@ for EMAIL in EMAILS:
                 if len(data) < 500: raise Exception(f"bad payload {len(data)}")
                 open(mp3, "wb").write(data)
             except Exception as e:
-                log("mp3 dl fail", e); continue
+                log("mp3 dl fail", e); status(f"r{rnd} dlfail {repr(e)[:60]}"); continue
             ans = whisper_digits(mp3)
+            status(f"r{rnd} heard_ans={ans!r}")
             if len(ans) < 5:
                 ans2 = hitl_solve(mp3, rnd)
                 if len(ans2) >= 5: ans = ans2
