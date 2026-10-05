@@ -245,7 +245,10 @@ for EMAIL in EMAILS:
                 log("no audio link"); continue
             mp3 = f"/tmp/rnd{rnd}.mp3"
             try:
-                open(mp3, "wb").write(requests.get(href, timeout=30).content)
+                r = page.context.request.get(href, timeout=30000)
+                data = r.body()
+                if len(data) < 500: raise Exception(f"bad payload {len(data)}")
+                open(mp3, "wb").write(data)
             except Exception as e:
                 log("mp3 dl fail", e); continue
             ans = whisper_digits(mp3)
