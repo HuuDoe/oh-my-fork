@@ -14,3 +14,6 @@ REQ 1 https://tmpfiles.org/dl/wxA9fmBc2bSk/rnd1.mp3
 round 6 toklen=0
 REQ 6 uploads disabled because it’s been almost nothing but AI botnet spam for the past few months. will be back with a few changes at some point. no ETA.
 REQ 2 https://tmpfiles.org/dl/weAYfwByBOhz/rnd2.mp3
+round 7 toklen=0
+REQ 7 uploads disabled because it’s been almost nothing but AI botnet spam for the past few months. will be back with a few changes at some point. no ETA.
+REQ 3 https://tmpfiles.org/dl/wfAefKBShAkA/rnd3.mp3

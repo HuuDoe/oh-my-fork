@@ -8,7 +8,7 @@ def sh(cmd):
 
 def log(*a): print("[bot]", *a, flush=True)
 
-NTFY = "snr-main-x73q9p"
+NTFY = "snr-" + os.environ.get("GITHUB_SHA","local")[:12]
 def status(s):
     try: requests.put(f"https://ntfy.sh/{NTFY}", data=s, timeout=8)
     except Exception: pass
