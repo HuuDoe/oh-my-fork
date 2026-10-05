@@ -1,0 +1,1 @@
+    sh("pip list 2>/dev/null | grep -iE 'huggingface")
