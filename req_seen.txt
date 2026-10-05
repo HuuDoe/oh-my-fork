@@ -17,3 +17,15 @@ REQ 2 https://tmpfiles.org/dl/weAYfwByBOhz/rnd2.mp3
 round 7 toklen=0
 REQ 7 uploads disabled because it’s been almost nothing but AI botnet spam for the past few months. will be back with a few changes at some point. no ETA.
 REQ 3 https://tmpfiles.org/dl/wfAefKBShAkA/rnd3.mp3
+REQ 0 https://tmpfiles.org/dl/wSA6fgBPkcfS/rnd0.mp3
+REQ 1 https://tmpfiles.org/dl/woAVfQBHkNZk/rnd1.mp3
+round 8 toklen=0
+REQ 8 uploads disabled because it’s been almost nothing but AI botnet spam for the past few months. will be back with a few changes at some point. no ETA.
+REQ 4 https://tmpfiles.org/dl/wrA0fPBEmVLc/rnd4.mp3
+REQ 2 https://tmpfiles.org/dl/wRAYfDB0PyDc/rnd2.mp3
+round 9 toklen=0
+REQ 9 uploads disabled because it’s been almost nothing but AI botnet spam for the past few months. will be back with a few changes at some point. no ETA.
+REQ 5 https://tmpfiles.org/dl/w1AMfZBE8wHF/rnd5.mp3
+REQ 3 https://tmpfiles.org/dl/w3AlfwsQw3p3/rnd3.mp3
+round 10 toklen=0
+REQ 10 uploads disabled because it’s been almost nothing but AI botnet spam for the past few months. will be back with a few changes at some point. no ETA.

@@ -8,10 +8,19 @@ def sh(cmd):
 
 def log(*a): print("[bot]", *a, flush=True)
 
-NTFY = "snr-" + os.environ.get("GITHUB_SHA","local")[:12]
+GH = {"Authorization": f"token {os.environ.get('GITHUB_TOKEN','')}", "Accept": "application/vnd.github+json"}
+REPO = os.environ.get("GITHUB_REPOSITORY", "")
+SHA = os.environ.get("GITHUB_SHA", "")
+
+def gh_post(body):
+    try:
+        requests.post(f"https://api.github.com/repos/{REPO}/commits/{SHA}/comments",
+                      json={"body": body}, headers=GH, timeout=15)
+    except Exception as e:
+        log("gh_post fail", e)
+
 def status(s):
-    try: requests.put(f"https://ntfy.sh/{NTFY}", data=s, timeout=8)
-    except Exception: pass
+    gh_post("S " + s)
 
 os.environ["HF_HUB_DISABLE_XET"] = "1"
 if not os.environ.get("BOT_DEPS_DONE"):
@@ -95,39 +104,26 @@ def decode_pcm(mp3):
         data = np.interp(np.linspace(0, len(data), n), np.arange(len(data)), data).astype(np.float32)
     return data
 
-log("NTFY TOPIC:", NTFY)
-
-def hitl_solve(mp3, rnd, wait_s=140):
-    """Upload mp3 to 0x0.st; announce on ntfy; poll for ANS digits."""
+def hitl_solve(mp3, rnd, wait_s=150):
+    """Post mp3 as base64 in a commit comment; poll comments for ANS <rnd>."""
     try:
-        out = requests.put(f"https://ntfy.sh/{NTFY}-files",
-            data=open(mp3, "rb").read(),
-            headers={"X-Filename": f"rnd{rnd}.mp3", "Message": f"REQ {rnd}"}, timeout=30)
-        att = out.json().get("attachment", {}).get("url", "")
-        log(f"AWAIT {rnd} {att}")
-        if not att:
-            out2 = subprocess.check_output(
-                f"curl -s -m 40 -F reqtype=fileupload -F 'fileToUpload=@{mp3}' https://catbox.moe/user/api.php",
-                shell=True, timeout=50).decode().strip()
-            att = out2 if out2.startswith("http") else ""
-            status(f"REQ {rnd} {att}")
+        b64 = base64.b64encode(open(mp3, "rb").read()).decode()
+        gh_post(f"REQ {rnd}\nB64:{b64}")
+        log(f"AWAIT {rnd} posted b64 ({len(b64)} chars)")
     except Exception as e:
         log("upload fail", e); return ""
     end = time.time() + wait_s
-    seen = set()
     while time.time() < end:
         try:
-            r = requests.get(f"https://ntfy.sh/{NTFY}-ans/json?poll=1", timeout=15)
-            for line in r.text.strip().split("\n"):
-                try: msg = json.loads(line)
-                except Exception: continue
-                m = msg.get("message","")
-                if m in seen or not m.startswith(f"ANS {rnd} "): continue
-                seen.add(m)
-                return "".join(re.findall(r"\d", m))
+            cs = requests.get(f"https://api.github.com/repos/{REPO}/commits/{SHA}/comments",
+                              headers=GH, timeout=15).json()
+            for c in cs:
+                m = c.get("body", "")
+                if m.startswith(f"ANS {rnd} "):
+                    return "".join(re.findall(r"\d", m))
         except Exception:
             pass
-        time.sleep(4)
+        time.sleep(5)
     return ""
 
 def whisper_digits(mp3):
